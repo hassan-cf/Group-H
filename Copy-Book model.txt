@@ -1,0 +1,69 @@
+class User {
+  final String id;
+  final String name;
+  final String email;
+  final String role;
+  final String? studentID;
+  final double fines;
+  final List<BorrowedBook> borrowedBooks;
+  final String? token;
+
+  User({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+    this.studentID,
+    this.fines = 0.0,
+    this.borrowedBooks = const [],
+    this.token,
+  });
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['_id'] ?? json['id'],
+      name: json['name'],
+      email: json['email'],
+      role: json['role'],
+      studentID: json['studentID'],
+      fines: (json['fines'] ?? 0).toDouble(),
+      borrowedBooks: (json['borrowedBooks'] as List?)
+              ?.map((b) => BorrowedBook.fromJson(b))
+              .toList() ??
+          [],
+      token: json['token'],
+    );
+  }
+}
+
+class BorrowedBook {
+  final String bookId;
+  final String? title;
+  final String? coverImage;
+  final DateTime issueDate;
+  final DateTime dueDate;
+  final DateTime? returnDate;
+
+  BorrowedBook({
+    required this.bookId,
+    this.title,
+    this.coverImage,
+    required this.issueDate,
+    required this.dueDate,
+    this.returnDate,
+  });
+
+  factory BorrowedBook.fromJson(Map<String, dynamic> json) {
+    final bookData = json['book'];
+    return BorrowedBook(
+      bookId: bookData is String ? bookData : bookData['_id'],
+      title: bookData is Map ? bookData['title'] : null,
+      coverImage: bookData is Map ? bookData['coverImage'] : null,
+      issueDate: DateTime.parse(json['issueDate']),
+      dueDate: DateTime.parse(json['dueDate']),
+      returnDate: json['returnDate'] != null
+          ? DateTime.parse(json['returnDate'])
+          : null,
+    );
+  }
+}
