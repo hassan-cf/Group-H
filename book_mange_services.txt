@@ -1,0 +1,82 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../models/book_model.dart';
+
+class BookManagementService {
+  final String baseUrl = 'http://localhost:5000/api/books';
+  final storage = const FlutterSecureStorage();
+
+  Future<String> uploadImage(List<int> bytes, String fileName) async {
+    final token = await storage.read(key: 'token');
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('http://localhost:5000/api/upload'),
+    );
+
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: fileName,
+      ),
+    );
+
+    final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['imageUrl'];
+    } else {
+      throw Exception(jsonDecode(response.body)['message'] ?? 'Upload failed');
+    }
+  }
+
+  Future<void> createBook(Map<String, dynamic> bookData) async {
+    final token = await storage.read(key: 'token');
+    final response = await http.post(
+      Uri.parse(baseUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(bookData),
+    );
+
+    if (response.statusCode != 201) {
+      throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+
+  Future<void> updateBook(String id, Map<String, dynamic> bookData) async {
+    final token = await storage.read(key: 'token');
+    final response = await http.put(
+      Uri.parse('$baseUrl/$id'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(bookData),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+
+  Future<void> deleteBook(String id) async {
+    final token = await storage.read(key: 'token');
+    final response = await http.delete(
+      Uri.parse('$baseUrl/$id'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+}
