@@ -1,0 +1,46 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+class LibrarianService {
+  final String baseUrl = 'http://localhost:5000/api/circulation';
+  final storage = const FlutterSecureStorage();
+
+  Future<void> issueBook(String userId, String bookId) async {
+    final token = await storage.read(key: 'token');
+    final response = await http.post(
+      Uri.parse('$baseUrl/issue'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'userId': userId,
+        'bookId': bookId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+
+  Future<void> returnBook(String userId, String bookId) async {
+    final token = await storage.read(key: 'token');
+    final response = await http.post(
+      Uri.parse('$baseUrl/return'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'userId': userId,
+        'bookId': bookId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+}
