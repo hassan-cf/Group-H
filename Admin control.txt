@@ -1,0 +1,63 @@
+const Book = require('../models/bookModel');
+const User = require('../models/userModel');
+
+// @desc    Get dashboard analytics
+// @route   GET /api/admin/analytics
+// @access  Private/Admin
+const getAnalytics = async (req, res, next) => {
+    try {
+        const totalBooks = await Book.countDocuments();
+        const totalUsers = await User.countDocuments();
+        const totalBorrowed = await Book.aggregate([
+            { $group: { _id: null, count: { $sum: { $subtract: ['$totalCopies', '$availableCopies'] } } } },
+        ]);
+
+        // MostBorrowed (Mock logic: based on available vs total)
+        const popularBooks = await Book.find({})
+            .sort({ totalCopies: -1 }) // Simplification for now
+            .limit(5);
+
+        res.json({
+            totalBooks,
+            totalUsers,
+            totalBorrowed: totalBorrowed[0]?.count || 0,
+            popularBooks,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Get list of users with overdue books
+// @route   GET /api/admin/defaulters
+// @access  Private/Admin/Librarian
+const getDefaulters = async (req, res, next) => {
+    try {
+        const today = new Date();
+        const users = await User.find({
+            'borrowedBooks.dueDate': { $lt: today },
+            'borrowedBooks.returnDate': { $exists: false },
+        }).select('name email fines studentID borrowedBooks');
+
+        const defaulters = users.map(user => {
+            const overdueBooks = user.borrowedBooks.filter(b => b.dueDate < today && !b.returnDate);
+            return {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                fines: user.fines,
+                studentID: user.studentID,
+                overdueCount: overdueBooks.length
+            };
+        });
+
+        res.json(defaulters);
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = {
+    getAnalytics,
+    getDefaulters,
+};
