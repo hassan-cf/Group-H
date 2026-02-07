@@ -1,0 +1,149 @@
+const Book = require('../models/bookModel');
+const User = require('../models/userModel');
+
+// @desc    Issue a book to a student
+// @route   POST /api/circulation/issue
+// @access  Private/Librarian
+const issueBook = async (req, res, next) => {
+    try {
+        const { userId, bookId, days } = req.body;
+
+        const book = await Book.findById(bookId);
+        const user = await User.findById(userId);
+
+        if (!book || !user) {
+            res.status(404);
+            throw new Error('Book or User not found');
+        }
+
+        if (book.availableCopies <= 0) {
+            res.status(400);
+            throw new Error('No copies available for issue');
+        }
+
+        // Check if user already has this book
+        const alreadyBorrowed = user.borrowedBooks.find(
+            (b) => b.book.toString() === bookId && !b.returnDate
+        );
+
+        if (alreadyBorrowed) {
+            res.status(400);
+            throw new Error('User already has this book issued');
+        }
+
+        // Update Book
+        book.availableCopies -= 1;
+        await book.save();
+
+        // Update User
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + (days || 14)); // Default 14 days
+
+        user.borrowedBooks.push({
+            book: bookId,
+            issueDate: new Date(),
+            dueDate,
+        });
+
+        user.activityLog.push({
+            action: `Issued book: ${book.title}`,
+        });
+
+        await user.save();
+
+        res.json({ message: 'Book issued successfully', dueDate });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Return a book
+// @route   POST /api/circulation/return
+// @access  Private/Librarian
+const returnBook = async (req, res, next) => {
+    try {
+        const { userId, bookId } = req.body;
+
+        const book = await Book.findById(bookId);
+        const user = await User.findById(userId);
+
+        if (!book || !user) {
+            res.status(404);
+            throw new Error('Book or User not found');
+        }
+
+        const borrowedBook = user.borrowedBooks.find(
+            (b) => b.book.toString() === bookId && !b.returnDate
+        );
+
+        if (!borrowedBook) {
+            res.status(400);
+            throw new Error('This book was not issued to this user or already returned');
+        }
+
+        // Calculate Fines
+        const today = new Date();
+        let fine = 0;
+        if (today > borrowedBook.dueDate) {
+            const diffTime = Math.abs(today - borrowedBook.dueDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            fine = diffDays * 5; // 5 units per day fine (example)
+            user.fines += fine;
+        }
+
+        // Update borrowed book entry
+        borrowedBook.returnDate = today;
+
+        // Update Book
+        book.availableCopies += 1;
+        await book.save();
+
+        user.activityLog.push({
+            action: `Returned book: ${book.title}. Fine: ${fine}`,
+        });
+
+        await user.save();
+
+        res.json({ message: 'Book returned successfully', fine });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Reserve a book
+// @route   POST /api/circulation/reserve
+// @access  Private/Student
+const reserveBook = async (req, res, next) => {
+    try {
+        const { bookId } = req.body;
+        const book = await Book.findById(bookId);
+
+        if (!book) {
+            res.status(404);
+            throw new Error('Book not found');
+        }
+
+        if (book.availableCopies > 0) {
+            res.status(400);
+            throw new Error('Book is available, no need to reserve');
+        }
+
+        if (book.reservations.includes(req.user._id)) {
+            res.status(400);
+            throw new Error('User already has a reservation for this book');
+        }
+
+        book.reservations.push(req.user._id);
+        await book.save();
+
+        res.json({ message: 'Book reserved successfully' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = {
+    issueBook,
+    returnBook,
+    reserveBook,
+};
